@@ -12,7 +12,6 @@ dist
 dist-ssr
 *.local
 .env
-bun.lockb
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -23,3 +22,5 @@ bun.lockb
 *.njsproj
 *.sln
 *.sw?
+
+.vercel

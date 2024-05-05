@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { useDropzone } from "react-dropzone";
+import React, { useCallback, useEffect, useState } from "react";
+import { FileRejection, useDropzone } from "react-dropzone";
 import {
   ArrowUpTrayIcon,
   XMarkIcon,
@@ -13,6 +13,15 @@ interface DropzoneProps {
   className: string;
 }
 
+interface RejectedFile {
+  file: File;
+  errors: { code: string; message: string }[];
+}
+
+interface ExtendedFile extends File {
+  preview: string;
+}
+
 AWS.config.update({
   accessKeyId: import.meta.env.VITE_APP_AWS_ACCESS_KEY_ID,
   secretAccessKey: import.meta.env.VITE_APP_AWS_SECRET_ACCESS_KEY,
@@ -20,29 +29,51 @@ AWS.config.update({
 });
 
 const Dropzone = ({ className }: DropzoneProps) => {
-  const [files, setFiles] = useState<File[]>([]);
-  const [rejected, setRejected] = useState<File[]>([]);
+  const [files, setFiles] = useState<ExtendedFile[]>([]);
+  const [rejected, setRejected] = useState<RejectedFile[]>([]);
   const [s3Links, setS3Links] = useState<string[]>([]);
   const [collagePreview, setCollagePreview] = useState<string>("");
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [isGeneratingCollage, setIsGeneratingCollage] =
     useState<boolean>(false);
 
-  const onDrop = useCallback((acceptedFiles: File[], rejectedFiles: File[]) => {
-    if (acceptedFiles?.length) {
-      setFiles((previousFiles) => [
-        ...previousFiles,
-        ...acceptedFiles.map((file: File) =>
-          Object.assign(file, { preview: URL.createObjectURL(file) })
-        ),
-      ]);
-    }
-    // console.log(files.map((file) => file.preview));
+  const onDrop = useCallback(
+    (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
+      if (acceptedFiles?.length) {
+        setFiles((previousFiles) => [
+          ...previousFiles,
+          ...acceptedFiles.map((file: ExtendedFile) =>
+            Object.assign(file, { preview: URL.createObjectURL(file) })
+          ),
+        ]);
+      }
+      // console.log(files.map((file) => file.preview));
 
-    if (rejectedFiles?.length) {
-      setRejected((previousFiles) => [...previousFiles, ...rejectedFiles]);
-    }
-  }, []);
+      // if (rejectedFiles?.length) {
+      //   setRejected((previousFiles: RejectedFile[]) => [
+      //     ...previousFiles,
+      //     ...rejectedFiles,
+      //   ]);
+      //   console.log(rejectedFiles);
+      // }
+
+      if (rejectedFiles?.length) {
+        setRejected((previousRejected) => [
+          ...previousRejected,
+          ...rejectedFiles.map(({ file, errors }) => ({
+            file,
+            errors: [
+              {
+                code: file.webkitRelativePath,
+                message: errors.map((err) => err.message).join(", "),
+              },
+            ],
+          })),
+        ]);
+      }
+    },
+    []
+  );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: {
@@ -55,7 +86,8 @@ const Dropzone = ({ className }: DropzoneProps) => {
 
   useEffect(() => {
     // Revoke the data uris to avoid memory leaks
-    return () => files.forEach((file) => URL.revokeObjectURL(file.preview));
+    return () =>
+      files.forEach((file: ExtendedFile) => URL.revokeObjectURL(file.preview));
   }, [files]);
 
   const removeFile = (name: string) => {
@@ -105,7 +137,6 @@ const Dropzone = ({ className }: DropzoneProps) => {
           return data.Location;
         })
       );
-      // console.log(links);
       return links;
     } catch (error) {
       toast.error(error, {
@@ -113,20 +144,11 @@ const Dropzone = ({ className }: DropzoneProps) => {
         position: "top-right",
         className: "bg-black text-white",
       });
-      // console.error("Error uploading files:", error);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-
-    // this block is not necessary anymore
-    // if (!files?.length)
-    //   return toast.error("No files to upload", {
-    //     duration: 3000,
-    //     position: "top-right",
-    //     className: "bg-black text-white",
-    //   });
 
     try {
       setIsUploading(true);
@@ -152,7 +174,9 @@ const Dropzone = ({ className }: DropzoneProps) => {
     }
   };
 
-  const handleCollageSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleCollageSubmit = async (
+    e: React.MouseEvent<HTMLButtonElement>
+  ) => {
     e.preventDefault();
     setIsGeneratingCollage(true);
     setFiles([]);
@@ -163,7 +187,7 @@ const Dropzone = ({ className }: DropzoneProps) => {
         className: "bg-black text-white",
       });
     }
-    // console.log(s3Links);
+
     // Create a canvas element
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
@@ -197,7 +221,6 @@ const Dropzone = ({ className }: DropzoneProps) => {
     }
 
     // Convert the canvas to a data URL
-
     const collageDataUrl = canvas.toDataURL();
     setCollagePreview(collageDataUrl);
     toast.success("Collage generated successfully", {
@@ -332,7 +355,7 @@ const Dropzone = ({ className }: DropzoneProps) => {
             Accepted Files ({files.length})
           </h3>
           <ul className="mt-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-10">
-            {files.map((file) => (
+            {files.map((file: ExtendedFile) => (
               <li
                 key={file.name}
                 className="relative h-32 rounded-md shadow-lg"
