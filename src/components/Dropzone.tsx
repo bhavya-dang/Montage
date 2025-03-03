@@ -47,15 +47,6 @@ const Dropzone = ({ className }: DropzoneProps) => {
           ),
         ]);
       }
-      // console.log(files.map((file) => file.preview));
-
-      // if (rejectedFiles?.length) {
-      //   setRejected((previousFiles: RejectedFile[]) => [
-      //     ...previousFiles,
-      //     ...rejectedFiles,
-      //   ]);
-      //   console.log(rejectedFiles);
-      // }
 
       if (rejectedFiles?.length) {
         setRejected((previousRejected) => [
