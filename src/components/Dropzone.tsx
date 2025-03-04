@@ -28,6 +28,9 @@ AWS.config.update({
   region: "us-east-1",
 });
 
+const s3 = new AWS.S3();
+const bucketName = "lolhaha";
+
 const Dropzone = ({ className }: DropzoneProps) => {
   const [files, setFiles] = useState<ExtendedFile[]>([]);
   const [rejected, setRejected] = useState<RejectedFile[]>([]);
@@ -81,6 +84,14 @@ const Dropzone = ({ className }: DropzoneProps) => {
       files.forEach((file: ExtendedFile) => URL.revokeObjectURL(file.preview));
   }, [files]);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      deleteOldFilesFromS3();
+    }, 5 * 60 * 1000); // Run every 5 minutes
+
+    return () => clearInterval(interval);
+  }, []);
+
   const removeFile = (name: string) => {
     setFiles((files) => files.filter((file) => file.name !== name));
     setS3Links((links) =>
@@ -105,8 +116,6 @@ const Dropzone = ({ className }: DropzoneProps) => {
   };
 
   const uploadFilesToS3 = async () => {
-    const s3 = new AWS.S3();
-    const bucketName = "lolhaha";
     const uploadedFileNames = s3Links.map((link) => link.split("/").pop()); // Extract file names from S3 links
 
     try {
@@ -135,6 +144,54 @@ const Dropzone = ({ className }: DropzoneProps) => {
         position: "top-right",
         className: "bg-black text-white",
       });
+    }
+  };
+
+  const deleteOldFilesFromS3 = async () => {
+    const retentionPeriod = 60 * 60 * 1000; // 1h
+
+    try {
+      // Fetch all objects from the S3 bucket
+      const { Contents } = await s3
+        .listObjectsV2({ Bucket: bucketName })
+        .promise();
+
+      if (!Contents || Contents.length === 0) {
+        console.log("No files found in the bucket.");
+        return;
+      }
+
+      const now = new Date().getTime();
+
+      // Filter files older than retentionPeriod
+      const filesToDelete = Contents.filter((file) => {
+        const lastModified = new Date(file.LastModified).getTime();
+        return now - lastModified > retentionPeriod;
+      });
+
+      if (filesToDelete.length === 0) return;
+
+      // Delete files
+      await Promise.all(
+        filesToDelete.map(async (file) => {
+          await s3
+            .deleteObject({ Bucket: bucketName, Key: file.Key })
+            .promise();
+        })
+      );
+
+      // toast.success("Old files deleted successfully", {
+      //   duration: 3000,
+      //   position: "top-right",
+      //   className: "bg-black text-white",
+      // });
+    } catch (error) {
+      console.error("Error deleting old files:", error);
+      // toast.error("Error deleting old files", {
+      //   duration: 3000,
+      //   position: "top-right",
+      //   className: "bg-black text-white",
+      // });
     }
   };
 
